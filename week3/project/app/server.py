@@ -4,6 +4,9 @@ from loguru import logger
 
 from classifier import NewsCategoryClassifier
 
+import datetime
+import time
+
 
 class PredictRequest(BaseModel):
     source: str
@@ -34,6 +37,11 @@ def startup_event():
     Access to the model instance and log file will be needed in /predict endpoint, make sure you
     store them as global variables
     """
+    global ncc, log_file
+    ncc = NewsCategoryClassifier()
+    ncc.load(MODEL_PATH)
+
+    log_file = open(LOGS_OUTPUT_PATH, "a+")
     logger.info("Setup completed")
 
 
@@ -45,6 +53,8 @@ def shutdown_event():
     1. Make sure to flush the log file and close any file pointers to avoid corruption
     2. Any other cleanups
     """
+    log_file.flush()  # Flush the log file
+    log_file.close()
     logger.info("Shutting down application")
 
 
@@ -65,7 +75,25 @@ def predict(request: PredictRequest):
     }
     3. Construct an instance of `PredictResponse` and return
     """
-    response = PredictResponse(scores={"label1": 0.9, "label2": 0.1}, label="label1")
+    timestamp = datetime.datetime.now()
+    start = time.time()
+
+    s = ncc.predict_proba(request)
+    l = ncc.predict_label(request)
+
+    end = time.time() - start
+    
+    response = PredictResponse(scores=s, label=l)
+
+    log = {
+        'timestamp' : timestamp.strftime("%Y:%m:%d %H:%M:%S"),
+        'request' : request,
+        'prediction' : response,
+        'latency' : end
+    }
+
+    log_file.write(str(log))
+    log_file.write('\n')
     return response
 
 
